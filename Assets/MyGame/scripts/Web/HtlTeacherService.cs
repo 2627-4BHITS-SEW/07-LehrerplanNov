@@ -9,7 +9,7 @@ using UnityEngine.Networking;
 namespace LehrerPlan.Web
 {
     /// <summary>
-    /// Holt die Lehrerliste von der HTL-Salzburg-Homepage
+    /// Holt die Lehrerliste und die Detailseiten von der HTL-Salzburg-Homepage
     /// und filtert die Daten mit Regex aus dem HTML.
     /// </summary>
     public class HtlTeacherService
@@ -31,7 +31,17 @@ namespace LehrerPlan.Web
             "-(?<trakt>[a-z])-?(?<nr>\\d{3})[a-z]?(?:-[^/.]*)?\\.html$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // Ein Feld auf der Detailseite:
+        // <div class="field Raum">
+        // <div class="label">Raum:</div>
+        // <div class="value"> <span class="text">B 211</span></div>
+        // Bei der E-Mail steht statt <span> ein <a class="email" ...>.
+        static readonly Regex DetailFieldRegex = new Regex(
+            "<div class=\"field (?<field>\\w+)\">\\s*<div class=\"label\">[^<]*</div>\\s*<div class=\"value\">\\s*(?:<span class=\"text\">|<a [^>]*>)(?<value>[^<]*)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         readonly Dictionary<string, List<TeacherInfo>> _teachersByRoom = new Dictionary<string, List<TeacherInfo>>();
+        readonly Dictionary<TeacherInfo, Task> _detailTasks = new Dictionary<TeacherInfo, Task>();
 
         public bool IsListLoaded { get; private set; }
         public int TeacherCount { get; private set; }
@@ -86,6 +96,74 @@ namespace LehrerPlan.Web
                 return list;
             }
             return Array.Empty<TeacherInfo>();
+        }
+
+        // ---------------------------------------------------------
+        // 2. Detailseiten aller Lehrkräfte eines Raums laden
+        // ---------------------------------------------------------
+        public async Task<IReadOnlyList<TeacherInfo>> LoadRoomAsync(string roomId)
+        {
+            IReadOnlyList<TeacherInfo> teachers = GetTeachers(roomId);
+
+            var tasks = new List<Task>();
+            foreach (TeacherInfo teacher in teachers)
+            {
+                tasks.Add(LoadDetailsAsync(teacher));
+            }
+            await Task.WhenAll(tasks);
+
+            return teachers;
+        }
+
+        /// <summary>Lädt die Detailseite einer Lehrkraft (nur einmal, danach aus dem Cache).</summary>
+        public Task LoadDetailsAsync(TeacherInfo teacher)
+        {
+            if (!_detailTasks.TryGetValue(teacher, out Task task))
+            {
+                task = LoadDetailsInternalAsync(teacher);
+                _detailTasks[teacher] = task;
+            }
+            return task;
+        }
+
+        async Task LoadDetailsInternalAsync(TeacherInfo teacher)
+        {
+            try
+            {
+                string html = await DownloadAsync(teacher.DetailUrl);
+
+                foreach (Match field in DetailFieldRegex.Matches(html))
+                {
+                    string value = Clean(field.Groups["value"].Value);
+
+                    switch (field.Groups["field"].Value)
+                    {
+                        case "Lehrername":
+                            if (value.Length > 0) teacher.Name = value;
+                            break;
+                        case "Raum":
+                            teacher.Room = value;
+                            break;
+                        case "Telefon":
+                            teacher.Phone = value;
+                            break;
+                        case "SprStunde":
+                            teacher.OfficeHours = value;
+                            break;
+                        case "Email":
+                            teacher.Email = value;
+                            break;
+                    }
+                }
+
+                teacher.DetailsLoaded = true;
+                teacher.DetailError = null;
+            }
+            catch (Exception e)
+            {
+                teacher.DetailError = e.Message;
+                _detailTasks.Remove(teacher); // beim nächsten Klick nochmal versuchen
+            }
         }
 
         // ---------------------------------------------------------
