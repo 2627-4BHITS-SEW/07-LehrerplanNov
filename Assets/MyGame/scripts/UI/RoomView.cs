@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text;
 using LehrerPlan.Data;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,7 +8,7 @@ using UnityEngine.UI;
 namespace LehrerPlan.UI
 {
     /// <summary>
-    /// Ein anklickbarer Raum im Flurplan (Rahmen, Tür und Raumnummer).
+    /// Ein anklickbarer Raum im Flurplan mit Türschild (Raumnummer + Namen).
     /// </summary>
     public class RoomView : MonoBehaviour
     {
@@ -28,6 +30,7 @@ namespace LehrerPlan.UI
         Image _fill;
         Button _button;
         Text _title;
+        Text _sign;
         bool _selected;
 
         public static RoomView Create(Transform parent, RoomSlot slot)
@@ -48,8 +51,15 @@ namespace LehrerPlan.UI
             UiFactory.CreateImage("Tuer", border.transform, DoorRect(slot), DoorColor);
 
             float w = slot.Rect.width;
+            float h = slot.Rect.height;
             view._title = UiFactory.CreateText("Raumnummer", border.transform, new Rect(6, 8, w - 12, 26), "",
                 22, TextColor, TextAnchor.MiddleCenter, FontStyle.Bold);
+            view._sign = UiFactory.CreateText("Tuerschild", border.transform, new Rect(8, 38, w - 16, h - 46), "",
+                14, TextColor, TextAnchor.UpperCenter);
+            view._sign.resizeTextForBestFit = true;
+            view._sign.resizeTextMinSize = 9;
+            view._sign.resizeTextMaxSize = 14;
+            view._sign.verticalOverflow = VerticalWrapMode.Truncate;
 
             view.SetRoom(null);
             return view;
@@ -62,7 +72,42 @@ namespace LehrerPlan.UI
             _selected = false;
             _button.interactable = roomId != null;
             _title.text = roomId != null ? RoomNames.Pretty(roomId) : "";
+            _sign.text = "";
             UpdateColor();
+        }
+
+        /// <summary>Befüllt das Türschild. null = Daten werden noch geladen.</summary>
+        public void SetDoorSign(IReadOnlyList<TeacherInfo> teachers)
+        {
+            if (RoomId == null)
+            {
+                _sign.text = "";
+                return;
+            }
+            if (teachers == null)
+            {
+                _sign.text = "<i>lädt …</i>";
+                return;
+            }
+            if (teachers.Count == 0)
+            {
+                _sign.text = "<i>kein Eintrag</i>";
+                return;
+            }
+
+            var sb = new StringBuilder();
+            foreach (TeacherInfo t in teachers)
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(t.ShortName);
+            }
+            _sign.text = sb.ToString();
+        }
+
+        /// <summary>Türschild, wenn die Homepage nicht erreichbar war.</summary>
+        public void SetDoorSignUnavailable()
+        {
+            _sign.text = RoomId != null ? "<i>keine Daten</i>" : "";
         }
 
         public void SetSelected(bool selected)

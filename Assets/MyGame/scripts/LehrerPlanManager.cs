@@ -63,6 +63,7 @@ namespace LehrerPlan
             if (this == null) return; // Play-Mode wurde inzwischen beendet
 
             Debug.Log($"{_service.TeacherCount} Lehrkräfte von der Homepage geladen.");
+            RefreshDoorSigns();
         }
 
         async void OnRoomClicked(RoomView room)
@@ -106,6 +107,7 @@ namespace LehrerPlan
             {
                 room.SetRoom(room.Slot.RoomOn(floor));
             }
+            RefreshDoorSigns();
 
             _floorTitle.text = $"{floor}. Stock  ·  Gang B und Gang C";
 
@@ -114,6 +116,14 @@ namespace LehrerPlan
                 bool active = pair.Key == floor;
                 pair.Value.targetGraphic.color = active ? ButtonActive : ButtonInactive;
                 pair.Value.GetComponentInChildren<Text>().color = active ? Color.white : DarkText;
+            }
+        }
+
+        void RefreshDoorSigns()
+        {
+            foreach (RoomView room in _rooms)
+            {
+                room.SetDoorSign(_service.IsListLoaded ? _service.GetTeachers(room.RoomId) : null);
             }
         }
 
