@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using LehrerPlan.Data;
@@ -36,6 +37,7 @@ namespace LehrerPlan
         Task _listTask;
         TeacherPopup _popup;
         Text _floorTitle;
+        Text _status;
         RoomView _selectedRoom;
         int _floor;
         int _clickVersion;
@@ -56,14 +58,34 @@ namespace LehrerPlan
         // Daten laden
         // ---------------------------------------------------------
 
+        /// <summary>Startet das Laden der Lehrerliste (oder versucht es nach einem Fehler erneut).</summary>
+        Task EnsureTeacherListLoading()
+        {
+            if (_listTask == null || _listTask.IsFaulted || _listTask.IsCanceled)
+            {
+                _listTask = _service.LoadTeacherListAsync();
+            }
+            return _listTask;
+        }
+
         async Task LoadTeacherListAsync()
         {
-            _listTask = _service.LoadTeacherListAsync();
-            await _listTask;
-            if (this == null) return; // Play-Mode wurde inzwischen beendet
+            SetStatus("Lade Lehrerliste von www.htl-salzburg.ac.at …");
+            try
+            {
+                await EnsureTeacherListLoading();
+                if (this == null) return; // Play-Mode wurde inzwischen beendet
 
-            Debug.Log($"{_service.TeacherCount} Lehrkräfte von der Homepage geladen.");
-            RefreshDoorSigns();
+                SetStatus($"{_service.TeacherCount} Lehrkräfte von der Homepage geladen. Klick auf einen Raum für Details.");
+                RefreshDoorSigns();
+            }
+            catch (Exception e)
+            {
+                if (this == null) return;
+                Debug.LogWarning("Lehrerliste konnte nicht geladen werden: " + e.Message);
+                SetStatus("Lehrerliste konnte nicht geladen werden (" + e.Message + "). Klick auf einen Raum versucht es erneut.");
+                RefreshDoorSigns();
+            }
         }
 
         async void OnRoomClicked(RoomView room)
@@ -75,20 +97,38 @@ namespace LehrerPlan
             string title = "Raum " + RoomNames.Pretty(room.RoomId);
             _popup.ShowLoading(title);
 
-            await _listTask;
-            IReadOnlyList<TeacherInfo> teachers = await _service.LoadRoomAsync(room.RoomId);
-
-            // inzwischen anderer Raum angeklickt oder Play-Mode beendet?
-            if (this == null || version != _clickVersion) return;
-
-            if (teachers.Count == 0)
+            try
             {
-                _popup.ShowMessage(title, _floor + ". Stock",
-                    "Für diesen Raum ist auf der HTL-Homepage keine Lehrkraft eingetragen.");
+                bool hadList = _service.IsListLoaded;
+                await EnsureTeacherListLoading();
+                if (!hadList && this != null)
+                {
+                    SetStatus($"{_service.TeacherCount} Lehrkräfte von der Homepage geladen.");
+                    RefreshDoorSigns();
+                }
+
+                IReadOnlyList<TeacherInfo> teachers = await _service.LoadRoomAsync(room.RoomId);
+
+                // inzwischen anderer Raum angeklickt oder Play-Mode beendet?
+                if (this == null || version != _clickVersion) return;
+
+                if (teachers.Count == 0)
+                {
+                    _popup.ShowMessage(title, _floor + ". Stock",
+                        "Für diesen Raum ist auf der HTL-Homepage keine Lehrkraft eingetragen.");
+                }
+                else
+                {
+                    _popup.ShowTeachers(title, teachers);
+                }
             }
-            else
+            catch (Exception e)
             {
-                _popup.ShowTeachers(title, teachers);
+                if (this == null || version != _clickVersion) return;
+                Debug.LogWarning(e);
+                _popup.ShowMessage(title, "Fehler", "Die Daten konnten nicht geladen werden:\n" + e.Message +
+                                                     "\n\nIst eine Internetverbindung vorhanden?");
+                SetStatus("Lehrerliste konnte nicht geladen werden (" + e.Message + ").");
             }
         }
 
@@ -123,7 +163,9 @@ namespace LehrerPlan
         {
             foreach (RoomView room in _rooms)
             {
-                room.SetDoorSign(_service.IsListLoaded ? _service.GetTeachers(room.RoomId) : null);
+                if (_service.IsListLoaded) room.SetDoorSign(_service.GetTeachers(room.RoomId));
+                else if (_listTask != null && _listTask.IsFaulted) room.SetDoorSignUnavailable();
+                else room.SetDoorSign(null);
             }
         }
 
@@ -138,6 +180,11 @@ namespace LehrerPlan
         {
             _clickVersion++;
             SelectRoom(null);
+        }
+
+        void SetStatus(string message)
+        {
+            if (_status != null) _status.text = message;
         }
 
         // ---------------------------------------------------------
@@ -172,6 +219,9 @@ namespace LehrerPlan
 
             _popup = TeacherPopup.Create(layout, new Rect(1345, 130, 545, 880));
             _popup.Closed += OnPopupClosed;
+
+            _status = UiFactory.CreateText("Status", layout, new Rect(30, 1025, 1860, 36), "",
+                18, MutedText, TextAnchor.MiddleLeft);
         }
 
         void BuildHeader(RectTransform parent)
