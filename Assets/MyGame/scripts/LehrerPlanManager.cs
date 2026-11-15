@@ -16,7 +16,7 @@ namespace LehrerPlan
     /// </summary>
     public class LehrerPlanManager : MonoBehaviour
     {
-        [Tooltip("Welches Stockwerk angezeigt wird (2 oder 3).")]
+        [Tooltip("Mit welchem Stockwerk der Plan startet (2 oder 3).")]
         [SerializeField] int startFloor = 3;
 
         static readonly Color BackgroundColor = UiFactory.Hex("#E9EEF3");
@@ -26,9 +26,12 @@ namespace LehrerPlan
         static readonly Color CorridorColor = UiFactory.Hex("#D9D9D9");
         static readonly Color DarkText = UiFactory.Hex("#1E3A5F");
         static readonly Color MutedText = UiFactory.Hex("#607D8B");
+        static readonly Color ButtonActive = UiFactory.Hex("#1E3A5F");
+        static readonly Color ButtonInactive = UiFactory.Hex("#FFFFFF");
 
         readonly HtlTeacherService _service = new HtlTeacherService();
         readonly List<RoomView> _rooms = new List<RoomView>();
+        readonly Dictionary<int, Button> _floorButtons = new Dictionary<int, Button>();
 
         Task _listTask;
         TeacherPopup _popup;
@@ -105,6 +108,13 @@ namespace LehrerPlan
             }
 
             _floorTitle.text = $"{floor}. Stock  ·  Gang B und Gang C";
+
+            foreach (KeyValuePair<int, Button> pair in _floorButtons)
+            {
+                bool active = pair.Key == floor;
+                pair.Value.targetGraphic.color = active ? ButtonActive : ButtonInactive;
+                pair.Value.GetComponentInChildren<Text>().color = active ? Color.white : DarkText;
+            }
         }
 
         void SelectRoom(RoomView room)
@@ -160,6 +170,16 @@ namespace LehrerPlan
                 "HTL Salzburg – Lehrerräume Trakt B / C", 38, DarkText, TextAnchor.MiddleLeft, FontStyle.Bold);
             _floorTitle = UiFactory.CreateText("Stockwerk", parent, new Rect(32, 76, 900, 34), "",
                 22, MutedText, TextAnchor.MiddleLeft);
+
+            float x = 1010;
+            foreach (int floor in FloorPlanData.Floors)
+            {
+                int f = floor; // eigene Variable für das Lambda
+                Button button = UiFactory.CreateButton("Stock_" + f, parent, new Rect(x, 40, 140, 54), f + ". Stock",
+                    ButtonInactive, DarkText, 22, () => SetFloor(f));
+                _floorButtons[f] = button;
+                x += 150;
+            }
         }
 
         void BuildPlan(RectTransform parent, Rect area)
