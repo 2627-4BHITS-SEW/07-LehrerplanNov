@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using LehrerPlan.Data;
 using LehrerPlan.UI;
+using LehrerPlan.Web;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -8,7 +10,8 @@ using UnityEngine.UI;
 namespace LehrerPlan
 {
     /// <summary>
-    /// Baut den 2D-Flurplan (Gang B und C) mit anklickbaren Räumen auf.
+    /// Baut den 2D-Flurplan (Gang B und C) auf, lädt die Lehrerdaten von der HTL-Homepage
+    /// und zeigt beim Klick auf einen Raum die Lehrkräfte in einem Popup an.
     /// Einfach auf ein leeres GameObject in der Szene legen.
     /// </summary>
     public class LehrerPlanManager : MonoBehaviour
@@ -24,11 +27,15 @@ namespace LehrerPlan
         static readonly Color DarkText = UiFactory.Hex("#1E3A5F");
         static readonly Color MutedText = UiFactory.Hex("#607D8B");
 
+        readonly HtlTeacherService _service = new HtlTeacherService();
         readonly List<RoomView> _rooms = new List<RoomView>();
 
+        Task _listTask;
+        TeacherPopup _popup;
         Text _floorTitle;
         RoomView _selectedRoom;
         int _floor;
+        int _clickVersion;
 
         void Awake()
         {
@@ -36,17 +43,49 @@ namespace LehrerPlan
             BuildUi();
         }
 
-        void Start()
+        async void Start()
         {
             SetFloor(startFloor == 2 ? 2 : 3);
+            await LoadTeacherListAsync();
         }
 
-        void OnRoomClicked(RoomView room)
+        // ---------------------------------------------------------
+        // Daten laden
+        // ---------------------------------------------------------
+
+        async Task LoadTeacherListAsync()
+        {
+            _listTask = _service.LoadTeacherListAsync();
+            await _listTask;
+            if (this == null) return; // Play-Mode wurde inzwischen beendet
+
+            Debug.Log($"{_service.TeacherCount} Lehrkräfte von der Homepage geladen.");
+        }
+
+        async void OnRoomClicked(RoomView room)
         {
             if (room.RoomId == null) return;
 
             SelectRoom(room);
-            Debug.Log("Raum angeklickt: " + RoomNames.Pretty(room.RoomId));
+            int version = ++_clickVersion;
+            string title = "Raum " + RoomNames.Pretty(room.RoomId);
+            _popup.ShowLoading(title);
+
+            await _listTask;
+            IReadOnlyList<TeacherInfo> teachers = await _service.LoadRoomAsync(room.RoomId);
+
+            // inzwischen anderer Raum angeklickt oder Play-Mode beendet?
+            if (this == null || version != _clickVersion) return;
+
+            if (teachers.Count == 0)
+            {
+                _popup.ShowMessage(title, _floor + ". Stock",
+                    "Für diesen Raum ist auf der HTL-Homepage keine Lehrkraft eingetragen.");
+            }
+            else
+            {
+                _popup.ShowTeachers(title, teachers);
+            }
         }
 
         // ---------------------------------------------------------
@@ -56,7 +95,9 @@ namespace LehrerPlan
         void SetFloor(int floor)
         {
             _floor = floor;
+            _clickVersion++; // laufende Anfragen ignorieren
             _selectedRoom = null;
+            _popup.Hide();
 
             foreach (RoomView room in _rooms)
             {
@@ -71,6 +112,12 @@ namespace LehrerPlan
             if (_selectedRoom != null) _selectedRoom.SetSelected(false);
             _selectedRoom = room;
             if (_selectedRoom != null) _selectedRoom.SetSelected(true);
+        }
+
+        void OnPopupClosed()
+        {
+            _clickVersion++;
+            SelectRoom(null);
         }
 
         // ---------------------------------------------------------
@@ -102,6 +149,9 @@ namespace LehrerPlan
 
             BuildHeader(layout);
             BuildPlan(layout, new Rect(30, 130, FloorPlanData.Width, FloorPlanData.Height));
+
+            _popup = TeacherPopup.Create(layout, new Rect(1345, 130, 545, 880));
+            _popup.Closed += OnPopupClosed;
         }
 
         void BuildHeader(RectTransform parent)
