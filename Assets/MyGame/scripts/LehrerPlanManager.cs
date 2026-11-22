@@ -20,9 +20,7 @@ namespace LehrerPlan
         [Tooltip("Mit welchem Stockwerk der Plan startet (2 oder 3).")]
         [SerializeField] int startFloor = 3;
 
-        static readonly Color BackgroundColor = UiFactory.Hex("#E9EEF3");
-        static readonly Color PaperColor = UiFactory.Hex("#FDFDFB");
-        static readonly Color GridColor = new Color(0.62f, 0.78f, 0.92f, 0.35f);
+        static readonly Color BackgroundColor = Color.white;
         static readonly Color WallColor = UiFactory.Hex("#212121");
         static readonly Color CorridorColor = UiFactory.Hex("#D9D9D9");
         static readonly Color DarkText = UiFactory.Hex("#1E3A5F");
@@ -37,7 +35,6 @@ namespace LehrerPlan
         Task _listTask;
         TeacherPopup _popup;
         Text _floorTitle;
-        Text _status;
         RoomView _selectedRoom;
         int _floor;
         int _clickVersion;
@@ -184,7 +181,7 @@ namespace LehrerPlan
 
         void SetStatus(string message)
         {
-            if (_status != null) _status.text = message;
+            Debug.Log(message);
         }
 
         // ---------------------------------------------------------
@@ -219,9 +216,6 @@ namespace LehrerPlan
 
             _popup = TeacherPopup.Create(layout, new Rect(1345, 130, 545, 880));
             _popup.Closed += OnPopupClosed;
-
-            _status = UiFactory.CreateText("Status", layout, new Rect(30, 1025, 1860, 36), "",
-                18, MutedText, TextAnchor.MiddleLeft);
         }
 
         void BuildHeader(RectTransform parent)
@@ -244,15 +238,7 @@ namespace LehrerPlan
 
         void BuildPlan(RectTransform parent, Rect area)
         {
-            Image paper = UiFactory.CreateImage("Flurplan", parent, area, PaperColor);
-            Transform plan = paper.transform;
-
-            // Karopapier wie in der Skizze
-            const float grid = 40f;
-            for (float gx = grid; gx < area.width; gx += grid)
-                UiFactory.CreateImage("GridV", plan, new Rect(gx, 0, 1, area.height), GridColor);
-            for (float gy = grid; gy < area.height; gy += grid)
-                UiFactory.CreateImage("GridH", plan, new Rect(0, gy, area.width, 1), GridColor);
+            Transform plan = UiFactory.CreateRect("Flurplan", parent, area);
 
             // Gänge
             UiFactory.CreateImage("Gang_B", plan, FloorPlanData.CorridorB, CorridorColor);
@@ -279,11 +265,6 @@ namespace LehrerPlan
                 room.Clicked += OnRoomClicked;
                 _rooms.Add(room);
             }
-
-            UiFactory.CreateText("Hinweis", plan, new Rect(440, 560, 780, 160),
-                "Klick auf einen Raum, um die Lehrkräfte anzuzeigen.\n" +
-                "<size=18>Die Daten werden live von www.htl-salzburg.ac.at geladen.</size>",
-                24, MutedText, TextAnchor.MiddleCenter);
         }
 
         static void EnsureEventSystem()

@@ -65,10 +65,11 @@ namespace LehrerPlan.UI
             return view;
         }
 
-        /// <summary>Setzt die Raumnummer für das aktuelle Stockwerk.</summary>
+        /// <summary>Setzt die Raumnummer für das aktuelle Stockwerk (null = Raum ausblenden).</summary>
         public void SetRoom(string roomId)
         {
             RoomId = roomId;
+            gameObject.SetActive(roomId != null); // kein Raum in diesem Stock -> ausblenden
             _selected = false;
             _button.interactable = roomId != null;
             _title.text = roomId != null ? RoomNames.Pretty(roomId) : "";
