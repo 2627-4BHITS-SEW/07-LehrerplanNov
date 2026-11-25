@@ -35,6 +35,7 @@ namespace LehrerPlan
         Task _listTask;
         TeacherPopup _popup;
         Text _floorTitle;
+        Text _status;
         RoomView _selectedRoom;
         int _floor;
         int _clickVersion;
@@ -181,6 +182,7 @@ namespace LehrerPlan
 
         void SetStatus(string message)
         {
+            if (_status != null) _status.text = message;
             Debug.Log(message);
         }
 
@@ -216,6 +218,10 @@ namespace LehrerPlan
 
             _popup = TeacherPopup.Create(layout, new Rect(1345, 130, 545, 880));
             _popup.Closed += OnPopupClosed;
+
+            // Statuszeile unten links (Lade- und Fehlermeldungen)
+            _status = UiFactory.CreateText("Status", layout, new Rect(30, 1025, 1860, 36), "",
+                18, MutedText, TextAnchor.MiddleLeft);
         }
 
         void BuildHeader(RectTransform parent)
